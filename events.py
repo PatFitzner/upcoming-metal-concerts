@@ -83,20 +83,17 @@ def parse_events(html: str) -> list[dict]:
             parts = plain.split(",", 1)
             venue = parts[0].strip() if len(parts) > 1 else ""
 
-        # Bands and genres from <li> entries
-        bands = []
+        # Artists from <li> entries
+        artists = []
         for li_match in re.finditer(
             r'<li>.*?<a\s+title="([^"]+)"[^>]*>[^<]*</a>\s*(.*?)</li>',
             block, re.DOTALL,
         ):
-            band_name = li_match.group(1).strip()
-            genre = li_match.group(2).strip()
-            bands.append({"name": band_name, "genre": genre})
+            artists.append(li_match.group(1).strip())
 
         events.append({
             "date": date,
-            "name": name,
-            "bands": bands,
+            "artists": artists,
             "venue": venue,
             "city": city,
             "url": url,
@@ -115,7 +112,6 @@ def main():
     )
     parser.add_argument("--city", help="Filter by city name (case-insensitive)")
     parser.add_argument("--band", help="Filter by band name (case-insensitive)")
-    parser.add_argument("--genre", help="Filter by genre (case-insensitive)")
     parser.add_argument(
         "--list-countries", action="store_true",
         help="List supported country codes and exit",
@@ -150,14 +146,7 @@ def main():
         band_lower = args.band.lower()
         events = [
             e for e in events
-            if any(band_lower in b["name"].lower() for b in e["bands"])
-        ]
-
-    if args.genre:
-        genre_lower = args.genre.lower()
-        events = [
-            e for e in events
-            if any(genre_lower in b["genre"].lower() for b in e["bands"])
+            if any(band_lower in a.lower() for a in e["artists"])
         ]
 
     json.dump(events, sys.stdout, indent=2, ensure_ascii=False)
