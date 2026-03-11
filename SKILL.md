@@ -13,7 +13,7 @@ Collect upcoming metal concerts and festivals worldwide via concerts-metal.com.
 On first run, `skill-config.json` is created with default settings. **The default country is Spain (ES).** Tell the user this and ask them which country they'd like to use. To see all supported country codes, run:
 
 ```bash
-python3 {baseDir}/events.py --list-countries
+python3 {baseDir}/scripts/events.py --list-countries
 ```
 
 Then update `country` in `{baseDir}/skill-config.json` to the user's chosen code before collecting.
@@ -23,13 +23,13 @@ Then update `country` in `{baseDir}/skill-config.json` to the user's chosen code
 Run the collector to scrape and accumulate concert data into `data/concerts.json`:
 
 ```bash
-python3 {baseDir}/events.py
+python3 {baseDir}/scripts/events.py
 ```
 
 The `--country` flag overrides the config for a single run without changing it:
 
 ```bash
-python3 {baseDir}/events.py --country DE
+python3 {baseDir}/scripts/events.py --country DE
 ```
 
 Re-running merges new concerts without duplicates and flags previously-seen future concerts that disappear from the source as potentially cancelled. Each record contains `date`, `artists`, `venue`, `city`, `url`, `discovered_at`, and `status` (`"active"` or `"cancelled"`).

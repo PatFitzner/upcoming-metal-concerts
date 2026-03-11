@@ -32,7 +32,7 @@ COUNTRIES = {
     "UY": "Uruguay", "VE": "Venezuela",
 }
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 CONCERTS_FILE = DATA_DIR / "concerts.json"
 CONFIG_FILE = BASE_DIR / "skill-config.json"
