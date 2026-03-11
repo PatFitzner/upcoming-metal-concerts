@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Scrape upcoming metal concerts from concerts-metal.com broadcast pages."""
+"""Scrape upcoming metal concerts from concerts-metal.com and accumulate to data/concerts.json."""
 
 import argparse
 import json
 import re
 import sys
 import urllib.request
+from datetime import datetime, timedelta
+from pathlib import Path
 
 BROADCAST_URL = (
     "https://broadcast.concerts-metal.com/"
@@ -29,6 +31,32 @@ COUNTRIES = {
     "UA": "Ukraine", "GB": "United-Kingdom", "US": "United-States",
     "UY": "Uruguay", "VE": "Venezuela",
 }
+
+BASE_DIR = Path(__file__).parent
+DATA_DIR = BASE_DIR / "data"
+CONCERTS_FILE = DATA_DIR / "concerts.json"
+CONFIG_FILE = BASE_DIR / "skill-config.json"
+
+DEFAULT_CONFIG = {
+    "country": "ES",
+    "concert_days": 200,
+}
+
+
+def load_config() -> dict:
+    if CONFIG_FILE.exists():
+        with open(CONFIG_FILE) as f:
+            return {**DEFAULT_CONFIG, **json.load(f)}
+    return dict(DEFAULT_CONFIG)
+
+
+def init_config() -> dict:
+    """Create skill-config.json with defaults if it doesn't exist."""
+    if not CONFIG_FILE.exists():
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2)
+            f.write("\n")
+    return load_config()
 
 
 def fetch_html(country_name: str) -> str:
@@ -102,16 +130,32 @@ def parse_events(html: str) -> list[dict]:
     return events
 
 
+def load_existing() -> dict[str, dict]:
+    """Load existing concerts keyed by URL for dedup."""
+    if CONCERTS_FILE.exists():
+        with open(CONCERTS_FILE) as f:
+            return {c["url"]: c for c in json.load(f)}
+    return {}
+
+
+def save_concerts(concerts: dict[str, dict]) -> None:
+    """Write merged concerts to data/concerts.json."""
+    DATA_DIR.mkdir(exist_ok=True)
+    with open(CONCERTS_FILE, "w") as f:
+        json.dump(list(concerts.values()), f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
 def main():
+    config = init_config()
+
     parser = argparse.ArgumentParser(
-        description="Search upcoming metal concerts from concerts-metal.com"
+        description="Collect upcoming metal concerts from concerts-metal.com"
     )
     parser.add_argument(
-        "--country", default="ES",
-        help="ISO country code (e.g. ES, DE, US, GB). Default: ES",
+        "--country", default=config["country"],
+        help=f"ISO country code (e.g. ES, DE, US, GB). Default from config: {config['country']}",
     )
-    parser.add_argument("--city", help="Filter by city name (case-insensitive)")
-    parser.add_argument("--band", help="Filter by band name (case-insensitive)")
     parser.add_argument(
         "--list-countries", action="store_true",
         help="List supported country codes and exit",
@@ -130,27 +174,47 @@ def main():
         print("Use --list-countries to see supported codes.", file=sys.stderr)
         sys.exit(1)
 
+    days = config["concert_days"]
+    cutoff = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
+
     try:
         html = fetch_html(country_name)
     except urllib.error.HTTPError as e:
         print(f"Error: HTTP {e.code} fetching {country_name} page.", file=sys.stderr)
         sys.exit(1)
 
-    events = parse_events(html)
+    scraped = parse_events(html)
 
-    if args.city:
-        city_lower = args.city.lower()
-        events = [e for e in events if city_lower in e["city"].lower()]
+    # Filter to events within the lookahead window
+    scraped = [e for e in scraped if today <= e["date"] <= cutoff]
 
-    if args.band:
-        band_lower = args.band.lower()
-        events = [
-            e for e in events
-            if any(band_lower in a.lower() for a in e["artists"])
-        ]
+    # Merge with existing data (dedup by URL) and detect cancellations
+    existing = load_existing()
+    now = datetime.now().isoformat()
+    scraped_urls = {e["url"] for e in scraped}
 
-    json.dump(events, sys.stdout, indent=2, ensure_ascii=False)
-    print()
+    # Check existing concerts for cancellations or reappearances
+    cancelled_count = 0
+    for concert in existing.values():
+        if concert["url"] in scraped_urls:
+            concert["status"] = "active"
+        elif today <= concert["date"] <= cutoff:
+            if concert.get("status") != "cancelled":
+                cancelled_count += 1
+            concert["status"] = "cancelled"
+
+    # Add newly-scraped concerts
+    for event in scraped:
+        if event["url"] not in existing:
+            event["discovered_at"] = now
+            event["status"] = "active"
+            existing[event["url"]] = event
+
+    save_concerts(existing)
+    print(f"Saved {len(existing)} concerts to {CONCERTS_FILE}")
+    if cancelled_count:
+        print(f"Flagged {cancelled_count} concert(s) as potentially cancelled")
 
 
 if __name__ == "__main__":

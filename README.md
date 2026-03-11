@@ -11,8 +11,7 @@ Copy this directory into `~/.openclaw/skills/upcoming-metal-concerts/` or your w
 ## Standalone usage
 
 ```bash
-python3 events.py --country ES --city Valencia
-python3 events.py --country DE --genre "death"
-python3 events.py --country GB --band "Kreator"
+python3 events.py --country ES
+python3 events.py --country DE
 python3 events.py --list-countries
 ```
